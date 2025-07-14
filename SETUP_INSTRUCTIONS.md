@@ -10,10 +10,10 @@ Add these secrets:
 
 | Secret Name | Value |
 |-------------|-------|
-| `GITHUB_TOKEN_ENHANCED` | `your-github-token-here` |
+| `GH_TOKEN_ENHANCED` | `your-github-token-here` |
 | `DOCKER_REGISTRY` | `ghcr.io` |
-| `GITHUB_ORG` | `laxmideepak` |
-| `GITHUB_REPO` | `devops-e2e` |
+| `GHUB_ORG` | `laxmideepak` |
+| `GHUB_REPO` | `devops-e2e` |
 
 ## 2. **Setup Platform Locally** (One-time)
 
