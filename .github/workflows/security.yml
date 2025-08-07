@@ -50,7 +50,7 @@ jobs:
 
     - name: Run Snyk security scan
       uses: snyk/actions/node@master
-      if: ${{ secrets.SNYK_TOKEN != '' }}
+      if: ${{ secrets.SNYK_TOKEN }}
       env:
         SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
       with:
