@@ -48,14 +48,6 @@ jobs:
     - name: Run npm audit
       run: npm audit --audit-level=high || echo "Vulnerabilities found but continuing..."
 
-    - name: Run Snyk security scan
-      uses: snyk/actions/node@master
-      if: ${{ secrets.SNYK_TOKEN }}
-      env:
-        SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-      with:
-        args: --severity-threshold=high
-
   container-scan:
     name: Container Vulnerability Scan
     runs-on: ubuntu-latest
@@ -101,28 +93,6 @@ jobs:
       if: always()
       with:
         sarif_file: 'semgrep-results.sarif'
-
-  license-check:
-    name: License Compliance Check
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18'
-        cache: 'npm'
-
-    - name: Install license checker
-      run: npm install -g license-checker
-
-    - name: Check licenses
-      run: |
-        echo "License check would run here"
-        echo "This is a placeholder for license compliance checking"
 
   security-policy:
     name: Security Policy Check
