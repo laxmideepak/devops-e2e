@@ -92,7 +92,6 @@ jobs:
     strategy:
       matrix:
         service: [api-gateway, auth-service, user-service, order-service]
-        platform: [linux/amd64, linux/arm64]
 
     steps:
     - name: Checkout code
@@ -123,7 +122,7 @@ jobs:
       uses: docker/build-push-action@v5
       with:
         context: ./services/${{ matrix.service }}
-        platforms: ${{ matrix.platform }}
+        platforms: linux/amd64
         push: true
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
