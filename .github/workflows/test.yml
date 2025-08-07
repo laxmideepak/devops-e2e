@@ -1,0 +1,40 @@
+name: Test Workflow
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Simple Test
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Run a simple test
+      run: |
+        echo "✅ GitHub Actions is working!"
+        echo "Repository: ${{ github.repository }}"
+        echo "Branch: ${{ github.ref }}"
+        echo "Commit: ${{ github.sha }}"
+        
+    - name: List files
+      run: |
+        echo "📁 Repository structure:"
+        ls -la
+        echo ""
+        echo "📁 Services:"
+        ls -la services/
+        
+    - name: Check package.json files
+      run: |
+        echo "📦 Package.json files:"
+        find services -name "package.json" -exec echo "Found: {}" \;
+        
+    - name: Success message
+      run: |
+        echo "🎉 All tests passed!"
+        echo "GitHub Actions is working correctly."
