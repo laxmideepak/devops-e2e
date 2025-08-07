@@ -3,13 +3,23 @@ const helmet = require('helmet');
 const cors = require('cors');
 const compression = require('compression');
 const rateLimit = require('express-rate-limit');
+const { createProxyMiddleware } = require('http-proxy-middleware');
+require('dotenv').config();
+
+const logger = require('./utils/logger');
+const authMiddleware = require('./middleware/auth');
+const circuitBreakerManager = require('./utils/circuitBreaker');
+const serviceDiscovery = require('./utils/serviceDiscovery');
 
 const app = express();
-const PORT = process.env.PORT || 8080;
+const PORT = process.env.PORT || 3000;
 
 // Security middleware
 app.use(helmet());
-app.use(cors());
+app.use(cors({
+  origin: process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000'],
+  credentials: true
+}));
 app.use(compression());
 
 // Rate limiting
@@ -24,6 +34,16 @@ app.use(limiter);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
+// Request logging
+app.use((req, res, next) => {
+  logger.info(`${req.method} ${req.path}`, {
+    ip: req.ip,
+    userAgent: req.get('User-Agent'),
+    requestId: req.headers['x-request-id'] || require('uuid').v4()
+  });
+  next();
+});
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.status(200).json({
@@ -37,31 +57,136 @@ app.get('/health', (req, res) => {
 });
 
 // Readiness check endpoint
-app.get('/ready', (req, res) => {
-  res.status(200).json({
-    status: 'ready',
-    service: 'api-gateway',
-    checks: {
-      database: 'healthy',
-      redis: 'healthy',
-      external_apis: 'healthy'
-    },
-    timestamp: new Date().toISOString()
-  });
+app.get('/ready', async (req, res) => {
+  try {
+    const healthStatus = {
+      status: 'ready',
+      service: 'api-gateway',
+      checks: {
+        auth_service: 'unknown',
+        user_service: 'unknown',
+        order_service: 'unknown'
+      },
+      timestamp: new Date().toISOString()
+    };
+
+    // Check service health
+    const services = [
+      { name: 'auth_service', url: process.env.AUTH_SERVICE_URL || 'http://auth-service:3001' },
+      { name: 'user_service', url: process.env.USER_SERVICE_URL || 'http://user-service:3002' },
+      { name: 'order_service', url: process.env.ORDER_SERVICE_URL || 'http://order-service:3003' }
+    ];
+
+    for (const service of services) {
+      try {
+        const response = await require('axios').get(`${service.url}/health`, { timeout: 5000 });
+        healthStatus.checks[service.name] = response.status === 200 ? 'healthy' : 'unhealthy';
+      } catch (error) {
+        logger.error(`Health check failed for ${service.name}:`, error.message);
+        healthStatus.checks[service.name] = 'unhealthy';
+      }
+    }
+
+    const allHealthy = Object.values(healthStatus.checks).every(status => status === 'healthy');
+    const statusCode = allHealthy ? 200 : 503;
+    
+    res.status(statusCode).json(healthStatus);
+  } catch (error) {
+    logger.error('Readiness check failed:', error);
+    res.status(503).json({
+      status: 'unhealthy',
+      service: 'api-gateway',
+      error: error.message
+    });
+  }
 });
 
-// API routes
-app.get('/api/status', (req, res) => {
-  res.json({
-    message: 'API Gateway is running',
-    services: {
-      'user-service': 'healthy',
-      'order-service': 'healthy',
-      'api-gateway': 'healthy'
-    },
-    version: '1.0.0',
-    timestamp: new Date().toISOString()
-  });
+// Create circuit breakers for each service
+const authBreaker = circuitBreakerManager.createHttpBreaker('auth-service', process.env.AUTH_SERVICE_URL || 'http://auth-service:3001');
+const userBreaker = circuitBreakerManager.createHttpBreaker('user-service', process.env.USER_SERVICE_URL || 'http://user-service:3002');
+const orderBreaker = circuitBreakerManager.createHttpBreaker('order-service', process.env.ORDER_SERVICE_URL || 'http://order-service:3003');
+
+// API routes with authentication and circuit breaker
+app.use('/api/auth', authMiddleware.optionalAuth, async (req, res, next) => {
+  try {
+    const response = await authBreaker.fire({
+      method: req.method,
+      url: req.url.replace('/api/auth', '/auth'),
+      data: req.body,
+      headers: req.headers
+    });
+    res.status(response.status).json(response.data);
+  } catch (error) {
+    logger.error('Auth service error:', error);
+    res.status(503).json({ error: 'Auth service unavailable' });
+  }
+});
+
+// User service routes (requires authentication)
+app.use('/api/users', authMiddleware.requireAuth, async (req, res, next) => {
+  try {
+    const headers = { ...req.headers };
+    if (req.user) {
+      headers['X-User-ID'] = req.user.userId;
+    }
+    
+    const response = await userBreaker.fire({
+      method: req.method,
+      url: req.url.replace('/api/users', '/users'),
+      data: req.body,
+      headers
+    });
+    res.status(response.status).json(response.data);
+  } catch (error) {
+    logger.error('User service error:', error);
+    res.status(503).json({ error: 'User service unavailable' });
+  }
+});
+
+// Order service routes (requires authentication)
+app.use('/api/orders', authMiddleware.requireAuth, async (req, res, next) => {
+  try {
+    const headers = { ...req.headers };
+    if (req.user) {
+      headers['X-User-ID'] = req.user.userId;
+    }
+    
+    const response = await orderBreaker.fire({
+      method: req.method,
+      url: req.url.replace('/api/orders', '/orders'),
+      data: req.body,
+      headers
+    });
+    res.status(response.status).json(response.data);
+  } catch (error) {
+    logger.error('Order service error:', error);
+    res.status(503).json({ error: 'Order service unavailable' });
+  }
+});
+
+// API status endpoint
+app.get('/api/status', async (req, res) => {
+  try {
+    const circuitBreakerStatus = circuitBreakerManager.getStatus();
+    const healthStatus = circuitBreakerManager.getHealthStatus();
+    
+    res.json({
+      message: 'API Gateway is running',
+      services: {
+        'auth-service': circuitBreakerStatus['auth-service']?.state || 'unknown',
+        'user-service': circuitBreakerStatus['user-service']?.state || 'unknown',
+        'order-service': circuitBreakerStatus['order-service']?.state || 'unknown',
+        'api-gateway': 'healthy'
+      },
+      version: '1.0.0',
+      timestamp: new Date().toISOString(),
+      circuitBreaker: circuitBreakerStatus,
+      health: healthStatus
+    });
+  } catch (error) {
+    logger.error('Status check failed:', error);
+    res.status(500).json({ error: 'Status check failed' });
+  }
 });
 
 // Default route
@@ -72,18 +197,23 @@ app.get('/', (req, res) => {
     endpoints: {
       health: '/health',
       ready: '/ready',
-      status: '/api/status'
+      status: '/api/status',
+      auth: '/api/auth/*',
+      users: '/api/users/*',
+      orders: '/api/orders/*'
     },
+    documentation: '/docs',
     timestamp: new Date().toISOString()
   });
 });
 
 // Error handling middleware
 app.use((err, req, res, next) => {
-  console.error(err.stack);
+  logger.error('Unhandled error:', err);
   res.status(500).json({
     error: 'Internal Server Error',
-    message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong!'
+    message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong!',
+    requestId: req.headers['x-request-id']
   });
 });
 
@@ -91,15 +221,27 @@ app.use((err, req, res, next) => {
 app.use('*', (req, res) => {
   res.status(404).json({
     error: 'Not Found',
-    message: `Route ${req.originalUrl} not found`
+    message: `Route ${req.originalUrl} not found`,
+    requestId: req.headers['x-request-id']
   });
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  logger.info('SIGTERM received, shutting down gracefully');
+  process.exit(0);
+});
+
+process.on('SIGINT', () => {
+  logger.info('SIGINT received, shutting down gracefully');
+  process.exit(0);
 });
 
 // Start server
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 API Gateway running on port ${PORT}`);
-  console.log(`🏥 Health check: http://localhost:${PORT}/health`);
-  console.log(`📊 Status: http://localhost:${PORT}/api/status`);
+  logger.info(`🚀 API Gateway running on port ${PORT}`);
+  logger.info(`🏥 Health check: http://localhost:${PORT}/health`);
+  logger.info(`📊 Status: http://localhost:${PORT}/api/status`);
 });
 
 module.exports = app; 

@@ -1,0 +1,78 @@
+{
+  "name": "devops-e2e-platform",
+  "version": "1.0.0",
+  "description": "Complete DevOps E2E platform with microservices architecture",
+  "main": "index.js",
+  "scripts": {
+    "install:all": "npm run install:services && npm run install:infrastructure",
+    "install:services": "cd services/api-gateway && npm install && cd ../auth-service && npm install && cd ../user-service && npm install && cd ../order-service && npm install",
+    "install:infrastructure": "echo 'Infrastructure dependencies will be installed during deployment'",
+    "dev": "concurrently \"npm run dev:api-gateway\" \"npm run dev:auth-service\" \"npm run dev:user-service\" \"npm run dev:order-service\"",
+    "dev:api-gateway": "cd services/api-gateway && npm run dev",
+    "dev:auth-service": "cd services/auth-service && npm run dev",
+    "dev:user-service": "cd services/user-service && npm run dev",
+    "dev:order-service": "cd services/order-service && npm run dev",
+    "test:all": "npm run test:api-gateway && npm run test:auth-service && npm run test:user-service && npm run test:order-service",
+    "test:api-gateway": "cd services/api-gateway && npm test",
+    "test:auth-service": "cd services/auth-service && npm test",
+    "test:user-service": "cd services/user-service && npm test",
+    "test:order-service": "cd services/order-service && npm test",
+    "lint:all": "npm run lint:api-gateway && npm run lint:auth-service && npm run lint:user-service && npm run lint:order-service",
+    "lint:api-gateway": "cd services/api-gateway && npm run lint",
+    "lint:auth-service": "cd services/auth-service && npm run lint",
+    "lint:user-service": "cd services/user-service && npm run lint",
+    "lint:order-service": "cd services/order-service && npm run lint",
+    "build:all": "npm run build:api-gateway && npm run build:auth-service && npm run build:user-service && npm run build:order-service",
+    "build:api-gateway": "cd services/api-gateway && docker build -t devops-e2e/api-gateway .",
+    "build:auth-service": "cd services/auth-service && docker build -t devops-e2e/auth-service .",
+    "build:user-service": "cd services/user-service && docker build -t devops-e2e/user-service .",
+    "build:order-service": "cd services/order-service && docker build -t devops-e2e/order-service .",
+    "docker-compose:up": "docker-compose up -d",
+    "docker-compose:down": "docker-compose down",
+    "docker-compose:logs": "docker-compose logs -f",
+    "helm:install": "helm install devops-e2e ./infrastructure/helm/",
+    "helm:upgrade": "helm upgrade devops-e2e ./infrastructure/helm/",
+    "helm:uninstall": "helm uninstall devops-e2e",
+    "k8s:apply": "kubectl apply -f ./infrastructure/kubernetes/",
+    "k8s:delete": "kubectl delete -f ./infrastructure/kubernetes/",
+    "security:scan": "npm run security:scan:api-gateway && npm run security:scan:auth-service && npm run security:scan:user-service && npm run security:scan:order-service",
+    "security:scan:api-gateway": "cd services/api-gateway && npm run security",
+    "security:scan:auth-service": "cd services/auth-service && npm run security",
+    "security:scan:user-service": "cd services/user-service && npm run security",
+    "security:scan:order-service": "cd services/order-service && npm run security",
+    "format:all": "npm run format:api-gateway && npm run format:auth-service && npm run format:user-service && npm run format:order-service",
+    "format:api-gateway": "cd services/api-gateway && npm run format",
+    "format:auth-service": "cd services/auth-service && npm run format",
+    "format:user-service": "cd services/user-service && npm run format",
+    "format:order-service": "cd services/order-service && npm run format",
+    "clean": "rm -rf node_modules && find . -name 'node_modules' -type d -prune -exec rm -rf '{}' +",
+    "setup:db": "npm run setup:db:migrations && npm run setup:db:seeds",
+    "setup:db:migrations": "echo 'Database migrations will be run during deployment'",
+    "setup:db:seeds": "echo 'Database seeds will be run during deployment'"
+  },
+  "keywords": [
+    "devops",
+    "microservices",
+    "kubernetes",
+    "docker",
+    "ci-cd",
+    "monitoring"
+  ],
+  "author": "DevOps E2E Team",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/laxmideepak/devops-e2e.git"
+  },
+  "bugs": {
+    "url": "https://github.com/laxmideepak/devops-e2e/issues"
+  },
+  "homepage": "https://github.com/laxmideepak/devops-e2e#readme"
+}

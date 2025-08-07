@@ -1,0 +1,148 @@
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: ["CI Pipeline"]
+    types:
+      - completed
+    branches: [main]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # Deploy to staging
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    environment: staging
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup kubectl
+      uses: azure/setup-kubectl@v3
+      with:
+        version: 'latest'
+
+    - name: Configure kubectl
+      run: |
+        echo "${{ secrets.KUBE_CONFIG_STAGING }}" | base64 -d > kubeconfig
+        export KUBECONFIG=kubeconfig
+
+    - name: Deploy to staging
+      run: |
+        # Update image tags in Kubernetes manifests
+        sed -i "s|IMAGE_TAG|${{ github.sha }}|g" k8s/staging/
+        
+        # Apply Kubernetes manifests
+        kubectl apply -f k8s/staging/
+        
+        # Wait for deployment to be ready
+        kubectl rollout status deployment/api-gateway -n devops-e2e-staging --timeout=300s
+        kubectl rollout status deployment/auth-service -n devops-e2e-staging --timeout=300s
+        kubectl rollout status deployment/user-service -n devops-e2e-staging --timeout=300s
+        kubectl rollout status deployment/order-service -n devops-e2e-staging --timeout=300s
+
+    - name: Run smoke tests
+      run: |
+        # Add smoke tests here
+        echo "Running smoke tests against staging environment..."
+
+  # Deploy to production
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: deploy-staging
+    environment: production
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup kubectl
+      uses: azure/setup-kubectl@v3
+      with:
+        version: 'latest'
+
+    - name: Configure kubectl
+      run: |
+        echo "${{ secrets.KUBE_CONFIG_PRODUCTION }}" | base64 -d > kubeconfig
+        export KUBECONFIG=kubeconfig
+
+    - name: Deploy to production
+      run: |
+        # Update image tags in Kubernetes manifests
+        sed -i "s|IMAGE_TAG|${{ github.sha }}|g" k8s/production/
+        
+        # Apply Kubernetes manifests
+        kubectl apply -f k8s/production/
+        
+        # Wait for deployment to be ready
+        kubectl rollout status deployment/api-gateway -n devops-e2e-production --timeout=300s
+        kubectl rollout status deployment/auth-service -n devops-e2e-production --timeout=300s
+        kubectl rollout status deployment/user-service -n devops-e2e-production --timeout=300s
+        kubectl rollout status deployment/order-service -n devops-e2e-production --timeout=300s
+
+    - name: Run health checks
+      run: |
+        # Add health checks here
+        echo "Running health checks against production environment..."
+
+  # Rollback on failure
+  rollback:
+    name: Rollback
+    runs-on: ubuntu-latest
+    if: failure()
+    needs: [deploy-staging, deploy-production]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup kubectl
+      uses: azure/setup-kubectl@v3
+      with:
+        version: 'latest'
+
+    - name: Rollback staging
+      if: needs.deploy-staging.result == 'failure'
+      run: |
+        echo "${{ secrets.KUBE_CONFIG_STAGING }}" | base64 -d > kubeconfig
+        export KUBECONFIG=kubeconfig
+        kubectl rollout undo deployment/api-gateway -n devops-e2e-staging
+        kubectl rollout undo deployment/auth-service -n devops-e2e-staging
+        kubectl rollout undo deployment/user-service -n devops-e2e-staging
+        kubectl rollout undo deployment/order-service -n devops-e2e-staging
+
+    - name: Rollback production
+      if: needs.deploy-production.result == 'failure'
+      run: |
+        echo "${{ secrets.KUBE_CONFIG_PRODUCTION }}" | base64 -d > kubeconfig
+        export KUBECONFIG=kubeconfig
+        kubectl rollout undo deployment/api-gateway -n devops-e2e-production
+        kubectl rollout undo deployment/auth-service -n devops-e2e-production
+        kubectl rollout undo deployment/user-service -n devops-e2e-production
+        kubectl rollout undo deployment/order-service -n devops-e2e-production
+
+  # Notify deployment status
+  notify:
+    name: Notify Deployment Status
+    runs-on: ubuntu-latest
+    needs: [deploy-staging, deploy-production, rollback]
+    if: always()
+    
+    steps:
+    - name: Notify success
+      if: needs.deploy-staging.result == 'success' && needs.deploy-production.result == 'success'
+      run: |
+        echo "✅ Deployment successful!"
+        # Add notification logic here (Slack, email, etc.)
+
+    - name: Notify failure
+      if: needs.deploy-staging.result == 'failure' || needs.deploy-production.result == 'failure'
+      run: |
+        echo "❌ Deployment failed!"
+        # Add notification logic here (Slack, email, etc.)

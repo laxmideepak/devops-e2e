@@ -1,0 +1,204 @@
+{
+  "master": {
+    "tasks": [
+      {
+        "id": 1,
+        "title": "Setup Project Repository",
+        "description": "Initialize the project repository with necessary directories and files",
+        "details": "Create the project structure with directories for services, infrastructure, and documentation. Initialize Git and set up the README.md with project overview and setup instructions.",
+        "testStrategy": "Verify repository structure and presence of README.md",
+        "priority": "medium",
+        "dependencies": [],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 2,
+        "title": "Implement API Gateway",
+        "description": "Develop the API Gateway with JWT authentication and rate limiting",
+        "details": "Use Fastify with fastify-rate-limit for rate limiting and JWT authentication. Implement routes for service discovery and routing to microservices.",
+        "testStrategy": "Run unit tests for authentication and rate limiting, validate routing to services",
+        "priority": "high",
+        "dependencies": [
+          1
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 3,
+        "title": "Implement Auth Service",
+        "description": "Create the Auth Service with signup, login, and refresh token endpoints",
+        "details": "Implement signup with bcrypt for password hashing, login with JWT token generation, and refresh token endpoint. Ensure proper HTTP status codes for all responses.",
+        "testStrategy": "Run unit tests for each endpoint, validate JWT token generation and refresh logic",
+        "priority": "high",
+        "dependencies": [
+          1
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 4,
+        "title": "Implement User Service",
+        "description": "Develop the User Service with CRUD operations",
+        "details": "Create REST endpoints for user creation, retrieval, update, and deletion. Implement OpenAPI-3 spec for API documentation.",
+        "testStrategy": "Run unit tests for CRUD operations, validate OpenAPI spec against endpoints",
+        "priority": "high",
+        "dependencies": [
+          1
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 5,
+        "title": "Implement Orders Service",
+        "description": "Develop the Orders Service with create and read operations",
+        "details": "Implement POST endpoint for order creation and GET for order retrieval. Use NATS JetStream for async event publishing for order creation.",
+        "testStrategy": "Run unit tests for order creation and retrieval, validate event publishing",
+        "priority": "high",
+        "dependencies": [
+          1
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 6,
+        "title": "Set Up Postgres Container",
+        "description": "Configure and deploy the Postgres container with pgVector extension",
+        "details": "Create Dockerfile for Postgres 16 with pgVector extension. Set up environment variables for database connection and configure volume for data persistence.",
+        "testStrategy": "Verify Postgres container runs, validate pgVector extension installation",
+        "priority": "medium",
+        "dependencies": [
+          1
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 7,
+        "title": "Implement CI Pipeline",
+        "description": "Set up the CI pipeline with GitHub Actions",
+        "details": "Create GitHub Actions workflows for linting, unit tests, building multi-arch Docker images, Trivy scanning, and pushing to registry. Implement fail-fast pattern for pipeline stages.",
+        "testStrategy": "Validate workflow execution, ensure all stages pass before merging to main",
+        "priority": "high",
+        "dependencies": [
+          1
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 8,
+        "title": "Create Helm Charts",
+        "description": "Develop Helm charts for Kubernetes deployment",
+        "details": "Create Helm charts for each service and infrastructure components. Use Kustomize overlays for environment-specific configurations.",
+        "testStrategy": "Validate Helm chart installation and deployment in dev AKS cluster",
+        "priority": "medium",
+        "dependencies": [
+          1
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 9,
+        "title": "Set Up Observability Stack",
+        "description": "Configure Prometheus, Grafana, Loki, and Tempo for monitoring",
+        "details": "Deploy Prometheus for metrics scraping, Grafana for dashboards, Loki for logs, and Tempo for distributed tracing. Set up OpenTelemetry SDK for tracing.",
+        "testStrategy": "Verify metrics, logs, and traces are collected and accessible via Grafana",
+        "priority": "medium",
+        "dependencies": [
+          1
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 10,
+        "title": "Implement Blue-Green Deployment",
+        "description": "Set up blue-green deployment for production environment",
+        "details": "Create two AKS deployments for stable and preview environments. Implement routing via a service to switch between deployments.",
+        "testStrategy": "Validate deployment switching and traffic routing between stable and preview environments",
+        "priority": "medium",
+        "dependencies": [
+          1
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 11,
+        "title": "Implement Automated Database Migrations",
+        "description": "Set up database migration tooling with golang-migrate",
+        "details": "Create migration scripts using golang-migrate. Set up a job to run migrations as an init-container in Kubernetes deployments.",
+        "testStrategy": "Verify migration scripts execute correctly and database schema updates are applied",
+        "priority": "medium",
+        "dependencies": [
+          1
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 12,
+        "title": "Implement E2E Testing",
+        "description": "Set up Playwright for end-to-end testing",
+        "details": "Create Playwright tests for critical flows such as user signup and order creation. Validate interactions between services and the gateway.",
+        "testStrategy": "Run Playwright tests and ensure all critical flows are validated",
+        "priority": "medium",
+        "dependencies": [
+          1
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 13,
+        "title": "Implement Security Hardening",
+        "description": "Enhance security with OWASP headers and Dependabot",
+        "details": "Configure HTTP headers for security (e.g., HSTS, X-Content-Type-Options). Set up Dependabot for automatic dependency updates and vulnerability scanning.",
+        "testStrategy": "Validate security headers are present and Dependabot is configured for dependency updates",
+        "priority": "medium",
+        "dependencies": [
+          1
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 14,
+        "title": "Document and Polish Documentation",
+        "description": "Finalize documentation and create a screencast demo",
+        "details": "Update README.md and SETUP_INSTRUCTIONS.md with final documentation. Create a screencast demo to showcase the project setup and features.",
+        "testStrategy": "Verify documentation completeness and screencast demo functionality",
+        "priority": "medium",
+        "dependencies": [
+          1
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 15,
+        "title": "Finalize and Release v1.0",
+        "description": "Prepare for v1.0 release with final checks and documentation",
+        "details": "Perform final code reviews, ensure all tests pass, and prepare release notes. Tag the release as v1.0 and publish the blog post.",
+        "testStrategy": "Verify all requirements are met and release notes are accurate",
+        "priority": "high",
+        "dependencies": [
+          1
+        ],
+        "status": "done",
+        "subtasks": []
+      }
+    ],
+    "metadata": {
+      "created": "2025-08-07T18:21:01.623Z",
+      "updated": "2025-08-07T19:48:58.060Z",
+      "description": "Tasks for master context"
+    }
+  }
+}

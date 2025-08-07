@@ -1,0 +1,216 @@
+**Product Requirements Document (PRD)**
+*DevOps E2E – Phase 2 (“Remaining Work”)*
+
+---
+
+### 1 · Document Control
+
+| Item           | Value                                 |
+| -------------- | ------------------------------------- |
+| Author         | ChatGPT (initial draft for Deepak N.) |
+| Stakeholders   | Dev team, Ops/SRE, QA, Product Owner  |
+| Target release | **v1.0 GA – 12 weeks from kick-off**  |
+| Last updated   | 07 Aug 2025                           |
+
+---
+
+### 2 · Purpose & Vision
+
+The repository already proves a *hello-world* DevOps path (containerised API Gateway + CI handshake). Phase 2 will evolve it into a **full micro-service sandbox** that hiring managers or teammates can clone and deploy in <15 min to evaluate modern DevOps practices. The completed project should demonstrate:
+
+* Modern **service-mesh-ready** architecture
+* **Automated, shift-left** security & quality gates
+* **One-click** promotion from dev → staging → prod
+* End-to-end **observability** and **cost transparency**
+
+---
+
+### 3 · Goals & Success Metrics
+
+| Goal           | KPI / Acceptance                                                                                                |
+| -------------- | --------------------------------------------------------------------------------------------------------------- |
+| Spin-up speed  | `make dev-up` gives a working stack (gateway + ≥ 3 services + Postgres + Grafana) in ≤ 5 min on a 4-core laptop |
+| CI reliability | 100 % automated checks on every PR (lint, unit, SCA, container scan, e2e) – pipeline time ≤ 10 min              |
+| Deployment     | Push to `main` auto-deploys to a managed K8s sandbox (e.g., AKS) via GitHub Actions & Helm                      |
+| Observability  | Request traces visible in Grafana Tempo; 90th-pct API latency charted                                           |
+| Documentation  | README + diagrams let a new contributor install, code, test, and deploy inside 30 min                           |
+
+---
+
+### 4 · In-Scope vs Out-of-Scope
+
+| In Scope (Phase 2)                | Out of Scope (future)              |
+| --------------------------------- | ---------------------------------- |
+| Auth, User, Orders micro-services | Payment gateway integration        |
+| Postgres via Docker volume        | Multi-tenant DB sharding           |
+| GitHub Actions CI/CD              | GitLab/Jenkins pipelines           |
+| Helm charts + Kustomize overlays  | Terraforming cloud network peering |
+
+---
+
+### 5 · High-Level Architecture
+
+```
+┌────────────┐
+│   Client   │
+└─────┬──────┘
+      │ HTTPS
+┌─────▼──────┐
+│ API-Gateway│  (Node + Fastify)
+└──┬──┬──┬───┘
+   │  │  │ gRPC / REST
+┌──▼┐┌▼─┐┌▼─┐
+│Auth│User│Orders│  (Go / TS Services)
+└─┬─┘└┬─┘└─┬─┘
+  SQL  SQL  SQL
+   └────┬────┘
+      Postgres
+```
+
+*Sidecars*: OpenTelemetry collector + Envoy proxy per pod
+*Platform*: GitHub → DockerHub registry → AKS (dev/stage/prod namespaces)
+
+---
+
+### 6 · Functional Requirements
+
+| #    | Requirement                                                                                                                                                               | Notes                                                  |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| F-01 | **API Gateway routing** with JWT auth & rate-limit                                                                                                                        | Leverage `fastify-rate-limit`                          |
+| F-02 | **Auth Service**<br>• `/signup`, `/login` (bcrypt + JWT)<br>• `/refresh` token                                                                                            | 201/200/4xx responses                                  |
+| F-03 | **User Service** CRUD                                                                                                                                                     | REST + OpenAPI-3 spec                                  |
+| F-04 | **Orders Service** create/read                                                                                                                                            | Demo async outbox event (Kafka or NATS)                |
+| F-05 | **Service discovery** via K8s cluster DNS                                                                                                                                 | Gateway uses service DNS                               |
+| F-06 | **Centralised logging**                                                                                                                                                   | Std-out to Loki; query via Grafana                     |
+| F-07 | **Metrics & tracing**                                                                                                                                                     | Prom-scraped `/metrics`; OTLP traces                   |
+| F-08 | **CI Pipeline** stages<br>1) Install → Lint → Unit tests<br>2) Build multi-arch Docker (arm64/amd64)<br>3) Trivy scan<br>4) Push to registry<br>5) Helm upgrade --install | Fail-fast pattern                                      |
+| F-09 | **Blue-green deploy** for prod                                                                                                                                            | Two AKS deployments + routed by Stable/Preview service |
+| F-10 | **Automated database migration**                                                                                                                                          | `golang-migrate` job run as init-container             |
+
+---
+
+### 7 · Non-Functional Requirements
+
+| Category     | Requirement                                                   |
+| ------------ | ------------------------------------------------------------- |
+| Performance  | p95 gateway latency ≤ 120 ms under 100 RPS synthetic load     |
+| Availability | 99.5 % for Sandbox env                                        |
+| Security     | SCA, secret-scans, container CVE scan < High severity allowed |
+| Scalability  | Horizontal Pod Autoscaler (CPU 70 %, min 1 max 5)             |
+| Cost         | Sandbox infra ≤ \$30 / month                                  |
+| Compliance   | All OSS licenses recorded in `/THIRD_PARTY.md`                |
+
+---
+
+### 8 · Technical Stack
+
+* **Languages**: TypeScript (Node/Fastify), Go (micro-services), Bash
+* **Container runtime**: Docker → OCI images (current repo ≈ 83 % JS, 17 % Dockerfile) ([GitHub][1])
+* **Orchestration**: Kubernetes 1.30+, Helm v3, Kustomize overlays
+* **CI/CD**: GitHub Actions (`.github/workflows/`) skeleton exists ([GitHub][1])
+* **Observability**: Prometheus, Grafana, Loki, Tempo, OpenTelemetry SDK
+* **Data**: Postgres 16, pgVector extension (future AI demos)
+* **Message Bus**: NATS JetStream (lightweight)
+
+---
+
+### 9 · API & Data Contracts
+
+| Service | Endpoint             | Method | Req / Resp schema                                       |
+| ------- | -------------------- | ------ | ------------------------------------------------------- |
+| Auth    | `/api/v1/login`      | POST   | `{ email, password }` → `{ accessToken, refreshToken }` |
+| User    | `/api/v1/users/{id}` | GET    | → `UserDTO`                                             |
+| Orders  | `/api/v1/orders`     | POST   | Create order, emits `order.created` event               |
+
+*Full OpenAPI-3 YAML stored in `/docs/` and validated in CI.*
+
+---
+
+### 10 · CI/CD Pipeline Detail
+
+```yaml
+name: CI
+on:
+  pull_request:
+  push: { branches: [main] }
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps: [checkout, setup-node, npm ci, npm run lint, npm test]
+  build:
+    needs: test
+    strategy: { matrix: { arch: [amd64, arm64] } }
+    steps: [buildx bake, trivy scan, push]
+  deploy:
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    steps: [helm upgrade --install]
+```
+
+---
+
+### 11 · Monitoring & Alerting
+
+* **Dashboards**: Grafana boards for latency, error-rate, CPU/RAM, DB connections
+* **Alerts**: Slack webhook – p95 > 300 ms for 5 min OR error-rate > 1 %
+
+---
+
+### 12 · Testing Strategy
+
+| Layer       | Tool                        | Coverage Target                 |
+| ----------- | --------------------------- | ------------------------------- |
+| Unit        | Jest / Go-test              | ≥ 80 % lines                    |
+| Contract    | Dredd (OpenAPI tests)       | 100 % endpoints                 |
+| Integration | Docker-compose test harness | Gateway ↔ services              |
+| E2E         | Playwright (headless)       | Critical flows (signup → order) |
+
+---
+
+### 13 · Milestones & Timeline
+
+| Week | Deliverable                                                 |
+| ---- | ----------------------------------------------------------- |
+| 1    | Finalise PRD, architecture diagram, create `develop` branch |
+| 2-3  | Scaffold Auth, User, Orders services + unit tests           |
+| 4    | Postgres container, DB migration tooling                    |
+| 5    | CI jobs (lint, unit, build, scan)                           |
+| 6    | Helm charts, dev AKS cluster, automated deploy              |
+| 7    | Observability stack (Prometheus, Grafana, Loki)             |
+| 8    | Playwright E2E suite, load-test baseline                    |
+| 9    | Blue-green prod namespace, HPA tuning                       |
+| 10   | Security hardening (OWASP headers, Dependabot)              |
+| 11   | Docs polish, screencast demo                                |
+| 12   | **v1.0 GA** tag, blog post launch                           |
+
+---
+
+### 14 · Risks & Mitigations
+
+| Risk                    | Impact | Mitigation                                          |
+| ----------------------- | ------ | --------------------------------------------------- |
+| AKS cost overruns       | Medium | Use B-series burstable nodes, nightly shutdown job  |
+| CI minutes exhaustion   | High   | Enable build-kit caching, skip e2e on docs-only PRs |
+| Team unfamiliar with Go | Low    | Add style-guide + pre-commit hook, pair programming |
+
+---
+
+### 15 · Open Questions
+
+1. Should the message bus be **Kafka** (heavier) or **NATS** (simpler) for demo?
+2. Is AWS EKS preferred over AKS for recruiters familiar with AWS?
+3. Any compliance badges (SOC 2, HIPAA) needed for portfolio credibility?
+
+---
+
+### 16 · Appendix
+
+* Repo snapshot: `.github/workflows/`, `services/api-gateway/`, `README.md`, `SETUP_INSTRUCTIONS.md` present as of 07 Aug 2025 ([GitHub][1])
+* Language mix: **JavaScript 82.9 %, Dockerfile 17.1 %** ([GitHub][1])
+
+---
+
+**Next step:** review & sign-off by stakeholders, then create GitHub issues from each numbered requirement to begin execution.
+
+[1]: https://github.com/laxmideepak/devops-e2e "GitHub - laxmideepak/devops-e2e"
