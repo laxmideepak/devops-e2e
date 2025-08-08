@@ -1,6 +1,9 @@
+# Dependabot configuration for DevOps E2E Platform
+# This file configures automated dependency updates and security scanning
+
 version: 2
 updates:
-  # Enable version updates for npm
+  # Enable version updates for npm packages
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
@@ -16,8 +19,21 @@ updates:
       prefix: "npm"
       prefix-development: "npm-dev"
       include: "scope"
+    labels:
+      - "dependencies"
+      - "npm"
+    ignore:
+      # Ignore major version updates for critical packages
+      - dependency-name: "express"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "helmet"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "winston"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "jsonwebtoken"
+        update-types: ["version-update:semver-major"]
 
-  # Enable version updates for npm in each service
+  # API Gateway dependencies
   - package-ecosystem: "npm"
     directory: "/services/api-gateway"
     schedule:
@@ -30,10 +46,19 @@ updates:
     assignees:
       - "laxmideepak"
     commit-message:
-      prefix: "npm"
-      prefix-development: "npm-dev"
+      prefix: "api-gateway"
       include: "scope"
+    labels:
+      - "dependencies"
+      - "api-gateway"
+      - "security"
+    ignore:
+      - dependency-name: "express"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "helmet"
+        update-types: ["version-update:semver-major"]
 
+  # Auth Service dependencies
   - package-ecosystem: "npm"
     directory: "/services/auth-service"
     schedule:
@@ -46,10 +71,19 @@ updates:
     assignees:
       - "laxmideepak"
     commit-message:
-      prefix: "npm"
-      prefix-development: "npm-dev"
+      prefix: "auth-service"
       include: "scope"
+    labels:
+      - "dependencies"
+      - "auth-service"
+      - "security"
+    ignore:
+      - dependency-name: "express"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "bcrypt"
+        update-types: ["version-update:semver-major"]
 
+  # User Service dependencies
   - package-ecosystem: "npm"
     directory: "/services/user-service"
     schedule:
@@ -62,10 +96,17 @@ updates:
     assignees:
       - "laxmideepak"
     commit-message:
-      prefix: "npm"
-      prefix-development: "npm-dev"
+      prefix: "user-service"
       include: "scope"
+    labels:
+      - "dependencies"
+      - "user-service"
+      - "security"
+    ignore:
+      - dependency-name: "express"
+        update-types: ["version-update:semver-major"]
 
+  # Order Service dependencies
   - package-ecosystem: "npm"
     directory: "/services/order-service"
     schedule:
@@ -78,13 +119,19 @@ updates:
     assignees:
       - "laxmideepak"
     commit-message:
-      prefix: "npm"
-      prefix-development: "npm-dev"
+      prefix: "order-service"
       include: "scope"
+    labels:
+      - "dependencies"
+      - "order-service"
+      - "security"
+    ignore:
+      - dependency-name: "express"
+        update-types: ["version-update:semver-major"]
 
-  # Enable version updates for GitHub Actions
-  - package-ecosystem: "github-actions"
-    directory: "/"
+  # E2E Testing dependencies
+  - package-ecosystem: "npm"
+    directory: "/e2e"
     schedule:
       interval: "weekly"
       day: "monday"
@@ -95,10 +142,14 @@ updates:
     assignees:
       - "laxmideepak"
     commit-message:
-      prefix: "github-actions"
+      prefix: "e2e"
       include: "scope"
+    labels:
+      - "dependencies"
+      - "e2e"
+      - "testing"
 
-  # Enable version updates for Docker
+  # Docker dependencies
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
@@ -113,8 +164,40 @@ updates:
     commit-message:
       prefix: "docker"
       include: "scope"
+    labels:
+      - "dependencies"
+      - "docker"
+      - "security"
+    ignore:
+      # Ignore major version updates for base images
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "postgres"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "redis"
+        update-types: ["version-update:semver-major"]
 
-  # Security updates (immediate)
+  # GitHub Actions dependencies
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "laxmideepak"
+    assignees:
+      - "laxmideepak"
+    commit-message:
+      prefix: "github-actions"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "github-actions"
+      - "ci-cd"
+
+  # Security advisories
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
@@ -130,9 +213,123 @@ updates:
     labels:
       - "security"
       - "dependencies"
-    ignore:
-      # Ignore major version updates for critical packages
-      - dependency-name: "express"
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "pg"
-        update-types: ["version-update:semver-major"]
+      - "high-priority"
+    # Security updates should be merged automatically if tests pass
+    auto-merge: true
+    auto-merge-commit-message: "Auto-merge security update"
+    auto-merge-commit-message-options:
+      prefix: "security"
+      include: "scope"
+
+  # Security advisories for services
+  - package-ecosystem: "npm"
+    directory: "/services/api-gateway"
+    schedule:
+      interval: "daily"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "laxmideepak"
+    assignees:
+      - "laxmideepak"
+    commit-message:
+      prefix: "security"
+      include: "scope"
+    labels:
+      - "security"
+      - "api-gateway"
+      - "high-priority"
+    auto-merge: true
+
+  - package-ecosystem: "npm"
+    directory: "/services/auth-service"
+    schedule:
+      interval: "daily"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "laxmideepak"
+    assignees:
+      - "laxmideepak"
+    commit-message:
+      prefix: "security"
+      include: "scope"
+    labels:
+      - "security"
+      - "auth-service"
+      - "high-priority"
+    auto-merge: true
+
+  - package-ecosystem: "npm"
+    directory: "/services/user-service"
+    schedule:
+      interval: "daily"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "laxmideepak"
+    assignees:
+      - "laxmideepak"
+    commit-message:
+      prefix: "security"
+      include: "scope"
+    labels:
+      - "security"
+      - "user-service"
+      - "high-priority"
+    auto-merge: true
+
+  - package-ecosystem: "npm"
+    directory: "/services/order-service"
+    schedule:
+      interval: "daily"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "laxmideepak"
+    assignees:
+      - "laxmideepak"
+    commit-message:
+      prefix: "security"
+      include: "scope"
+    labels:
+      - "security"
+      - "order-service"
+      - "high-priority"
+    auto-merge: true
+
+  # Helm chart dependencies
+  - package-ecosystem: "helm"
+    directory: "/infrastructure/helm"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "laxmideepak"
+    assignees:
+      - "laxmideepak"
+    commit-message:
+      prefix: "helm"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "helm"
+      - "kubernetes"
+
+  # Terraform dependencies (if applicable)
+  - package-ecosystem: "terraform"
+    directory: "/infrastructure/terraform"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "laxmideepak"
+    assignees:
+      - "laxmideepak"
+    commit-message:
+      prefix: "terraform"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "terraform"
+      - "infrastructure"

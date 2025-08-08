@@ -1,9 +1,11 @@
 version: '3.8'
 
 services:
-  # PostgreSQL Database
+  # PostgreSQL Database with pgVector
   postgres:
-    image: postgres:15-alpine
+    build:
+      context: ./infrastructure/docker-compose
+      dockerfile: Dockerfile.postgres
     container_name: devops-e2e-postgres
     environment:
       POSTGRES_DB: devops_e2e
@@ -14,7 +16,6 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./infrastructure/docker-compose/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
     networks:
       - devops-e2e-network
     healthcheck:
@@ -188,8 +189,56 @@ services:
       GF_USERS_ALLOW_SIGN_UP: false
     volumes:
       - grafana_data:/var/lib/grafana
-      - ./infrastructure/docker-compose/grafana/provisioning:/etc/grafana/provisioning
+      - ./infrastructure/monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+      - ./infrastructure/monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
     depends_on:
+      - prometheus
+      - loki
+      - tempo
+    networks:
+      - devops-e2e-network
+
+  # Loki (Log Aggregation)
+  loki:
+    image: grafana/loki:latest
+    container_name: devops-e2e-loki
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - ./infrastructure/monitoring/loki/loki-config.yml:/etc/loki/local-config.yaml
+      - loki_data:/tmp/loki
+    networks:
+      - devops-e2e-network
+
+  # Tempo (Distributed Tracing)
+  tempo:
+    image: grafana/tempo:latest
+    container_name: devops-e2e-tempo
+    ports:
+      - "3200:3200"
+      - "4317:4317"
+      - "4318:4318"
+    command: -config.file=/etc/tempo/tempo-config.yaml
+    volumes:
+      - ./infrastructure/monitoring/tempo/tempo-config.yml:/etc/tempo/tempo-config.yaml
+      - tempo_data:/tmp/tempo
+    networks:
+      - devops-e2e-network
+
+  # OpenTelemetry Collector
+  otel-collector:
+    image: otel/opentelemetry-collector:latest
+    container_name: devops-e2e-otel-collector
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+      - "8889:8889"
+    command: --config=/etc/otel-collector-config.yaml
+    volumes:
+      - ./infrastructure/monitoring/otel/otel-collector-config.yml:/etc/otel-collector-config.yaml
+    depends_on:
+      - tempo
       - prometheus
     networks:
       - devops-e2e-network
@@ -202,6 +251,10 @@ volumes:
   prometheus_data:
     driver: local
   grafana_data:
+    driver: local
+  loki_data:
+    driver: local
+  tempo_data:
     driver: local
 
 networks:

@@ -1,0 +1,401 @@
+# DevOps E2E Platform Helm Chart Values
+# This file contains all configurable values for the platform
+
+# Global configuration
+global:
+  environment: production
+  domain: devops-e2e.local
+  imageRegistry: ghcr.io
+  imagePullSecrets: []
+  nameOverride: ""
+  fullnameOverride: ""
+
+# PostgreSQL Database Configuration
+postgresql:
+  enabled: true
+  image:
+    repository: postgres
+    tag: "16-alpine"
+    pullPolicy: IfNotPresent
+  
+  auth:
+    postgresPassword: "devops-e2e-password"
+    database: "devops_e2e"
+    username: "postgres"
+  
+  primary:
+    persistence:
+      enabled: true
+      size: 10Gi
+      storageClass: ""
+    
+    service:
+      type: ClusterIP
+      port: 5432
+    
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "250m"
+      limits:
+        memory: "1Gi"
+        cpu: "500m"
+    
+    podAnnotations: {}
+    podSecurityContext: {}
+    containerSecurityContext: {}
+    
+    extraEnvVars:
+      - name: POSTGRES_INITDB_ARGS
+        value: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+    
+    extraVolumeMounts:
+      - name: init-script
+        mountPath: /docker-entrypoint-initdb.d
+        subPath: init-db.sql
+    
+    extraVolumes:
+      - name: init-script
+        configMap:
+          name: postgres-init-script
+
+# Redis Configuration
+redis:
+  enabled: true
+  image:
+    repository: redis
+    tag: "7-alpine"
+    pullPolicy: IfNotPresent
+  
+  auth:
+    enabled: false
+  
+  master:
+    persistence:
+      enabled: true
+      size: 5Gi
+      storageClass: ""
+    
+    service:
+      type: ClusterIP
+      port: 6379
+    
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "512Mi"
+        cpu: "200m"
+
+# API Gateway Configuration
+apiGateway:
+  enabled: true
+  image:
+    repository: devops-e2e-api-gateway
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  
+  replicaCount: 2
+  
+  service:
+    type: LoadBalancer
+    port: 3000
+    targetPort: 3000
+  
+  ingress:
+    enabled: true
+    className: "nginx"
+    annotations:
+      kubernetes.io/ingress.class: nginx
+      cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    hosts:
+      - host: api.devops-e2e.local
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      - secretName: api-gateway-tls
+        hosts:
+          - api.devops-e2e.local
+  
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "250m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  
+  env:
+    NODE_ENV: production
+    PORT: 3000
+    AUTH_SERVICE_URL: http://auth-service:3001
+    USER_SERVICE_URL: http://user-service:3002
+    ORDER_SERVICE_URL: http://order-service:3003
+    ALLOWED_ORIGINS: "https://api.devops-e2e.local,https://devops-e2e.local"
+
+# Auth Service Configuration
+authService:
+  enabled: true
+  image:
+    repository: devops-e2e-auth-service
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  
+  replicaCount: 2
+  
+  service:
+    type: ClusterIP
+    port: 3001
+    targetPort: 3001
+  
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "250m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  
+  env:
+    NODE_ENV: production
+    PORT: 3001
+    DB_HOST: postgresql-primary
+    DB_PORT: 5432
+    DB_NAME: devops_e2e
+    DB_USER: postgres
+    DB_PASSWORD: "devops-e2e-password"
+    REDIS_URL: redis://redis-master:6379
+    JWT_SECRET: "your-secret-key-change-in-production"
+    JWT_REFRESH_SECRET: "your-refresh-secret-key-change-in-production"
+    ALLOWED_ORIGINS: "https://api.devops-e2e.local,https://devops-e2e.local"
+
+# User Service Configuration
+userService:
+  enabled: true
+  image:
+    repository: devops-e2e-user-service
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  
+  replicaCount: 2
+  
+  service:
+    type: ClusterIP
+    port: 3002
+    targetPort: 3002
+  
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "250m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  
+  env:
+    NODE_ENV: production
+    PORT: 3002
+    DB_HOST: postgresql-primary
+    DB_PORT: 5432
+    DB_NAME: devops_e2e
+    DB_USER: postgres
+    DB_PASSWORD: "devops-e2e-password"
+    JWT_SECRET: "your-secret-key-change-in-production"
+    ALLOWED_ORIGINS: "https://api.devops-e2e.local,https://devops-e2e.local"
+
+# Order Service Configuration
+orderService:
+  enabled: true
+  image:
+    repository: devops-e2e-order-service
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  
+  replicaCount: 2
+  
+  service:
+    type: ClusterIP
+    port: 3003
+    targetPort: 3003
+  
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "250m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  
+  env:
+    NODE_ENV: production
+    PORT: 3003
+    DB_HOST: postgresql-primary
+    DB_PORT: 5432
+    DB_NAME: devops_e2e
+    DB_USER: postgres
+    DB_PASSWORD: "devops-e2e-password"
+    JWT_SECRET: "your-secret-key-change-in-production"
+    ALLOWED_ORIGINS: "https://api.devops-e2e.local,https://devops-e2e.local"
+
+# Monitoring Stack Configuration
+monitoring:
+  enabled: true
+  
+  # Prometheus Configuration
+  prometheus:
+    enabled: true
+    image:
+      repository: prom/prometheus
+      tag: "latest"
+      pullPolicy: IfNotPresent
+    
+    service:
+      type: ClusterIP
+      port: 9090
+      targetPort: 9090
+    
+    persistence:
+      enabled: true
+      size: 10Gi
+      storageClass: ""
+    
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "250m"
+      limits:
+        memory: "1Gi"
+        cpu: "500m"
+  
+  # Grafana Configuration
+  grafana:
+    enabled: true
+    image:
+      repository: grafana/grafana
+      tag: "latest"
+      pullPolicy: IfNotPresent
+    
+    service:
+      type: ClusterIP
+      port: 3000
+      targetPort: 3000
+    
+    ingress:
+      enabled: true
+      className: "nginx"
+      annotations:
+        kubernetes.io/ingress.class: nginx
+        cert-manager.io/cluster-issuer: "letsencrypt-prod"
+      hosts:
+        - host: grafana.devops-e2e.local
+          paths:
+            - path: /
+              pathType: Prefix
+      tls:
+        - secretName: grafana-tls
+          hosts:
+            - grafana.devops-e2e.local
+    
+    persistence:
+      enabled: true
+      size: 5Gi
+      storageClass: ""
+    
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "250m"
+      limits:
+        memory: "512Mi"
+        cpu: "500m"
+    
+    env:
+      GF_SECURITY_ADMIN_PASSWORD: "admin"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+
+# Network Policies
+networkPolicies:
+  enabled: true
+  
+  # Default deny all
+  defaultDeny: true
+  
+  # Allow specific traffic
+  allowedTraffic:
+    - from: api-gateway
+      to: [auth-service, user-service, order-service]
+      ports: [3001, 3002, 3003]
+    - from: auth-service
+      to: [postgresql, redis]
+      ports: [5432, 6379]
+    - from: user-service
+      to: [postgresql]
+      ports: [5432]
+    - from: order-service
+      to: [postgresql]
+      ports: [5432]
+
+# Pod Security Standards
+podSecurityStandards:
+  enabled: true
+  level: "restricted"
+  
+  # Security contexts
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    fsGroup: 1000
+  
+  # Container security context
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
+
+# Database Migrations Configuration
+migrations:
+  enabled: true
+  image:
+    repository: migrate/migrate
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: "50m"
+    limits:
+      memory: "128Mi"
+      cpu: "100m"
+  
+  # Migration timeout in seconds
+  timeout: 300
+  
+  # Hook annotations for Helm
+  hooks:
+    preInstall: true
+    preUpgrade: true
+    hookWeight: -5
+    deletePolicy: "before-hook-creation,hook-succeeded"
+
+# Resource quotas
+resourceQuotas:
+  enabled: true
+  
+  limits:
+    requests:
+      cpu: "2"
+      memory: "4Gi"
+    limits:
+      cpu: "4"
+      memory: "8Gi"
+  
+  persistentvolumeclaims:
+    requests:
+      storage: "50Gi"
+    limits:
+      storage: "100Gi"

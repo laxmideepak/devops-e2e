@@ -1,0 +1,32 @@
+FROM postgres:16-alpine
+
+# Install build dependencies for pgVector
+RUN apk add --no-cache \
+    build-base \
+    git \
+    postgresql-dev \
+    && rm -rf /var/cache/apk/*
+
+# Clone and build pgVector
+RUN cd /tmp && \
+    git clone --branch v0.5.1 https://github.com/pgvector/pgvector.git && \
+    cd pgvector && \
+    make && \
+    make install
+
+# Clean up build dependencies
+RUN apk del build-base git postgresql-dev
+
+# Copy initialization script
+COPY init-db.sql /docker-entrypoint-initdb.d/
+
+# Set proper permissions
+RUN chmod 644 /docker-entrypoint-initdb.d/init-db.sql
+
+# Expose port
+EXPOSE 5432
+
+# Set default environment variables
+ENV POSTGRES_DB=devops_e2e
+ENV POSTGRES_USER=postgres
+ENV POSTGRES_PASSWORD=password

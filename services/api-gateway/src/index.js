@@ -1,8 +1,5 @@
 const express = require('express');
-const helmet = require('helmet');
-const cors = require('cors');
 const compression = require('compression');
-const rateLimit = require('express-rate-limit');
 const { createProxyMiddleware } = require('http-proxy-middleware');
 require('dotenv').config();
 
@@ -10,25 +7,30 @@ const logger = require('./utils/logger');
 const authMiddleware = require('./middleware/auth');
 const circuitBreakerManager = require('./utils/circuitBreaker');
 const serviceDiscovery = require('./utils/serviceDiscovery');
+const securityMiddleware = require('./middleware/security');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Security middleware
-app.use(helmet());
-app.use(cors({
-  origin: process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000'],
-  credentials: true
-}));
+// Enhanced security middleware
+app.use(securityMiddleware.helmet);
+app.use(securityMiddleware.cors);
 app.use(compression());
 
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
-  message: 'Too many requests from this IP, please try again later.'
-});
-app.use(limiter);
+// Rate limiting with different limits for different endpoints
+app.use(securityMiddleware.rateLimit.general); // General rate limit
+app.use('/api/auth', securityMiddleware.rateLimit.auth); // Strict rate limit for auth
+app.use('/api', securityMiddleware.rateLimit.api); // API rate limit
+
+// Additional security headers
+app.use(securityMiddleware.additionalHeaders);
+
+// Request validation and sanitization
+app.use(securityMiddleware.validateRequest);
+app.use(securityMiddleware.sanitizeInput);
+
+// Security logging
+app.use(securityMiddleware.securityLogging);
 
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
@@ -208,14 +210,7 @@ app.get('/', (req, res) => {
 });
 
 // Error handling middleware
-app.use((err, req, res, next) => {
-  logger.error('Unhandled error:', err);
-  res.status(500).json({
-    error: 'Internal Server Error',
-    message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong!',
-    requestId: req.headers['x-request-id']
-  });
-});
+app.use(securityMiddleware.errorHandler);
 
 // 404 handler
 app.use('*', (req, res) => {

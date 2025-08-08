@@ -1,0 +1,249 @@
+name: Blue-Green Deployment
+
+on:
+  workflow_run:
+    workflows: ["CI Pipeline"]
+    types:
+      - completed
+    branches: [main]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  deploy-to-green:
+    name: Deploy to Green Environment
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Build and push Docker images
+      uses: docker/build-push-action@v5
+      with:
+        context: ./services/api-gateway
+        platforms: linux/amd64
+        push: true
+        tags: |
+          ghcr.io/${{ github.repository }}-api-gateway:latest
+          ghcr.io/${{ github.repository }}-api-gateway:${{ github.sha }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    - name: Set up kubectl
+      uses: azure/setup-kubectl@v3
+      with:
+        version: 'latest'
+
+    - name: Configure kubectl
+      run: |
+        echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > kubeconfig
+        export KUBECONFIG=kubeconfig
+
+    - name: Deploy to Green Environment
+      run: |
+        # Deploy new version to green environment
+        kubectl set image deployment/api-gateway-green \
+          api-gateway=ghcr.io/${{ github.repository }}-api-gateway:${{ github.sha }} \
+          -n devops-e2e-green
+        
+        # Wait for rollout to complete
+        kubectl rollout status deployment/api-gateway-green -n devops-e2e-green --timeout=300s
+        
+        # Check health
+        kubectl get pods -n devops-e2e-green -l app=api-gateway,version=green
+
+    - name: Run Health Checks
+      run: |
+        # Wait for pods to be ready
+        kubectl wait --for=condition=ready pod -l app=api-gateway,version=green -n devops-e2e-green --timeout=300s
+        
+        # Test health endpoint
+        kubectl run test-health --image=curlimages/curl --rm -i --restart=Never -- \
+          curl -f http://api-gateway-green.devops-e2e-green.svc.cluster.local:3000/health
+
+    - name: Notify Deployment Success
+      if: success()
+      run: |
+        echo "✅ Deployment to GREEN environment successful"
+        echo "🟩 New version: ${{ github.sha }}"
+        echo "📊 Ready for traffic switch testing"
+
+  test-green-environment:
+    name: Test Green Environment
+    runs-on: ubuntu-latest
+    needs: deploy-to-green
+    if: success()
+    
+    steps:
+    - name: Set up kubectl
+      uses: azure/setup-kubectl@v3
+      with:
+        version: 'latest'
+
+    - name: Configure kubectl
+      run: |
+        echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > kubeconfig
+        export KUBECONFIG=kubeconfig
+
+    - name: Run Integration Tests
+      run: |
+        # Port forward to green environment
+        kubectl port-forward svc/api-gateway-green 3000:3000 -n devops-e2e-green &
+        sleep 10
+        
+        # Run basic health checks
+        curl -f http://localhost:3000/health
+        curl -f http://localhost:3000/metrics
+        
+        # Run API tests
+        curl -f http://localhost:3000/api/auth/health
+        curl -f http://localhost:3000/api/users/health
+        curl -f http://localhost:3000/api/orders/health
+
+    - name: Performance Test
+      run: |
+        # Simple load test
+        for i in {1..10}; do
+          curl -s http://localhost:3000/health > /dev/null
+          sleep 0.1
+        done
+
+  switch-traffic-to-green:
+    name: Switch Traffic to Green
+    runs-on: ubuntu-latest
+    needs: test-green-environment
+    if: success()
+    
+    steps:
+    - name: Set up kubectl
+      uses: azure/setup-kubectl@v3
+      with:
+        version: 'latest'
+
+    - name: Configure kubectl
+      run: |
+        echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > kubeconfig
+        export KUBECONFIG=kubeconfig
+
+    - name: Switch Traffic to Green
+      run: |
+        # Update nginx configuration to route to green
+        kubectl patch configmap traffic-router-config -n default --patch '{
+          "data": {
+            "nginx.conf": "events {\n  worker_connections 1024;\n}\n\nhttp {\n  upstream blue {\n    server api-gateway-blue.devops-e2e-blue.svc.cluster.local:3000;\n  }\n\n  upstream green {\n    server api-gateway-green.devops-e2e-green.svc.cluster.local:3000;\n  }\n\n  # Route to green (preview)\n  upstream active {\n    server api-gateway-green.devops-e2e-green.svc.cluster.local:3000;\n  }\n\n  server {\n    listen 80;\n\n    location / {\n      proxy_pass http://active;\n      proxy_set_header Host $host;\n      proxy_set_header X-Real-IP $remote_addr;\n      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n      proxy_set_header X-Forwarded-Proto $scheme;\n    }\n\n    location /health {\n      proxy_pass http://active;\n    }\n\n    location /metrics {\n      proxy_pass http://active;\n    }\n  }\n}"
+          }
+        }'
+        
+        # Restart traffic router
+        kubectl rollout restart deployment traffic-router -n default
+        kubectl rollout status deployment traffic-router -n default --timeout=60s
+
+    - name: Verify Traffic Switch
+      run: |
+        # Wait for traffic router to be ready
+        kubectl wait --for=condition=ready pod -l app=traffic-router -n default --timeout=60s
+        
+        # Test external endpoint
+        kubectl run test-external --image=curlimages/curl --rm -i --restart=Never -- \
+          curl -f http://api-gateway-router.default.svc.cluster.local/health
+
+    - name: Notify Traffic Switch
+      if: success()
+      run: |
+        echo "🟩 Traffic switched to GREEN environment"
+        echo "🚀 New version is now live"
+        echo "📊 Monitor metrics for any issues"
+
+  monitor-deployment:
+    name: Monitor Deployment
+    runs-on: ubuntu-latest
+    needs: switch-traffic-to-green
+    if: success()
+    
+    steps:
+    - name: Set up kubectl
+      uses: azure/setup-kubectl@v3
+      with:
+        version: 'latest'
+
+    - name: Configure kubectl
+      run: |
+        echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > kubeconfig
+        export KUBECONFIG=kubeconfig
+
+    - name: Monitor for 5 minutes
+      run: |
+        echo "🔍 Monitoring deployment for 5 minutes..."
+        
+        for i in {1..30}; do
+          echo "Check $i/30"
+          
+          # Check pod status
+          kubectl get pods -n devops-e2e-green -l app=api-gateway,version=green
+          
+          # Check error rates
+          kubectl logs -n devops-e2e-green -l app=api-gateway,version=green --tail=10
+          
+          sleep 10
+        done
+
+    - name: Final Health Check
+      run: |
+        # Final health check
+        kubectl get pods -n devops-e2e-green -l app=api-gateway,version=green
+        kubectl get pods -n default -l app=traffic-router
+        
+        echo "✅ Deployment monitoring completed"
+        echo "🟩 Green environment is stable"
+
+  rollback-if-needed:
+    name: Rollback if Issues Detected
+    runs-on: ubuntu-latest
+    needs: [switch-traffic-to-green, monitor-deployment]
+    if: failure()
+    
+    steps:
+    - name: Set up kubectl
+      uses: azure/setup-kubectl@v3
+      with:
+        version: 'latest'
+
+    - name: Configure kubectl
+      run: |
+        echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > kubeconfig
+        export KUBECONFIG=kubeconfig
+
+    - name: Rollback to Blue
+      run: |
+        echo "🚨 Issues detected, rolling back to BLUE environment..."
+        
+        # Switch traffic back to blue
+        kubectl patch configmap traffic-router-config -n default --patch '{
+          "data": {
+            "nginx.conf": "events {\n  worker_connections 1024;\n}\n\nhttp {\n  upstream blue {\n    server api-gateway-blue.devops-e2e-blue.svc.cluster.local:3000;\n  }\n\n  upstream green {\n    server api-gateway-green.devops-e2e-green.svc.cluster.local:3000;\n  }\n\n  # Route to blue (stable)\n  upstream active {\n    server api-gateway-blue.devops-e2e-blue.svc.cluster.local:3000;\n  }\n\n  server {\n    listen 80;\n\n    location / {\n      proxy_pass http://active;\n      proxy_set_header Host $host;\n      proxy_set_header X-Real-IP $remote_addr;\n      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n      proxy_set_header X-Forwarded-Proto $scheme;\n    }\n\n    location /health {\n      proxy_pass http://active;\n    }\n\n    location /metrics {\n      proxy_pass http://active;\n    }\n  }\n}"
+          }
+        }'
+        
+        # Restart traffic router
+        kubectl rollout restart deployment traffic-router -n default
+        kubectl rollout status deployment traffic-router -n default --timeout=60s
+
+    - name: Notify Rollback
+      run: |
+        echo "🟦 Traffic rolled back to BLUE environment"
+        echo "🚨 Deployment issues detected and resolved"
+        echo "📧 Notify team of rollback"
