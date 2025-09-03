@@ -59,12 +59,15 @@ jest.mock('winston', () => ({
     error: jest.fn(),
     warn: jest.fn(),
     debug: jest.fn(),
+    add: jest.fn(),
   })),
   format: {
     combine: jest.fn(),
     timestamp: jest.fn(),
     errors: jest.fn(),
     json: jest.fn(),
+    colorize: jest.fn(),
+    simple: jest.fn(),
   },
   transports: {
     Console: jest.fn(),

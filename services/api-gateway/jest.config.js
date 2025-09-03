@@ -56,7 +56,7 @@ module.exports = {
   restoreMocks: true,
   
   // Module name mapping
-  moduleNameMapping: {
+  moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1'
   },
   
