@@ -138,15 +138,21 @@ This platform showcases a complete DevOps ecosystem with:
 - **Integration Tests**: Service-to-service testing
 - **E2E Tests**: Playwright for full user journey testing
 - **Performance Tests**: Load testing with Artillery
+- **Code Coverage**: Automated coverage reporting with Codecov
+  - [![API Gateway Coverage](https://codecov.io/gh/laxmideepak/devops-e2e/branch/main/graph/badge.svg?flag=api-gateway)](https://codecov.io/gh/laxmideepak/devops-e2e?flag=api-gateway)
+  - [![Auth Service Coverage](https://codecov.io/gh/laxmideepak/devops-e2e/branch/main/graph/badge.svg?flag=auth-service)](https://codecov.io/gh/laxmideepak/devops-e2e?flag=auth-service)
+  - [![User Service Coverage](https://codecov.io/gh/laxmideepak/devops-e2e/branch/main/graph/badge.svg?flag=user-service)](https://codecov.io/gh/laxmideepak/devops-e2e?flag=user-service)
+  - [![Order Service Coverage](https://codecov.io/gh/laxmideepak/devops-e2e/branch/main/graph/badge.svg?flag=order-service)](https://codecov.io/gh/laxmideepak/devops-e2e?flag=order-service)
 
 ## 📈 CI/CD Pipeline
 
 ### Automated Workflows
 1. **Code Quality**: Linting, formatting, security scanning
 2. **Testing**: Unit, integration, and E2E tests
-3. **Security**: Vulnerability scanning, dependency analysis
-4. **Build**: Multi-platform Docker images
-5. **Deploy**: Blue-green deployment to Kubernetes
+3. **Code Coverage**: Automated coverage reporting and analysis
+4. **Security**: Vulnerability scanning, dependency analysis
+5. **Build**: Multi-platform Docker images
+6. **Deploy**: Blue-green deployment to Kubernetes
 
 ### Deployment Strategy
 - **Blue-Green Deployment**: Zero-downtime deployments

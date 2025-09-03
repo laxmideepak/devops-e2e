@@ -8,10 +8,16 @@
     "dev": "nodemon src/index.js",
     "test": "jest",
     "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage",
+    "test:coverage": "jest --coverage --coverageReporters=text-summary",
+    "test:coverage:html": "jest --coverage --coverageReporters=html",
+    "test:coverage:lcov": "jest --coverage --coverageReporters=lcov",
+    "test:coverage:badge": "jest --coverage --coverageReporters=text-summary && npm run generate:coverage:badge",
+    "generate:coverage:badge": "node scripts/generate-coverage-badge.js",
+    "test:ci": "jest --ci --coverage --coverageReporters=text-summary --coverageReporters=lcov",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
-    "format": "prettier --write src/"
+    "format": "prettier --write src/",
+    "security": "npm audit && npm audit fix"
   },
   "dependencies": {
     "express": "^4.18.2",
